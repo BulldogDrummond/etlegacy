@@ -37,8 +37,6 @@ void Com_ODBC_Error(
 /* TODO: This is basically just a function to test compile/link at the moment */
 void Com_ODBC_InitGameTest()
 {
-	Com_Printf("------ ODBC Initialization Test ------\n");
-
 	sv_odbcEnable   = Cvar_Get("odbc_enable",   "0", CVAR_TEMP);
 	sv_odbcDSN      = Cvar_Get("odbc_dsn",      "",  CVAR_TEMP);
 	sv_odbcUsername = Cvar_Get("odbc_username", "",  CVAR_TEMP);
@@ -55,6 +53,14 @@ void Com_ODBC_InitGameTest()
 	dsnname = sv_odbcDSN->string;
 	username = sv_odbcUsername->string;
 	password = sv_odbcPassword->string;
+
+	if (use_odbc = 0) {
+		Com_Printf("ODBC Support Disabled.\n");
+		Cvar_Set("sv_odbcReady","0");
+		return;
+	}
+
+	Com_Printf("------ ODBC Initialization Test ------\n");
 
 	SQLHENV env;
 	SQLHDBC dbc;
