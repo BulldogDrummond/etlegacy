@@ -319,6 +319,15 @@ void SV_Startup(void)
 #ifdef FEATURE_TRACKBASE
 	TB_ServerStart();
 #endif
+
+#ifdef FEATURE_ODBC
+Com_ODBC_InitGameTest();
+cvar_t *odbcTest = Cvar_Get("sv_odbcReady", "0", CVAR_SERVERINFO | CVAR_ROM);
+if (odbcTest->integer == 0) {
+        Com_Printf("Database Init Test Failed - Database Functions Disabled\n");
+}
+#endif /* FEATURE_ODBC */
+
 }
 
 /*

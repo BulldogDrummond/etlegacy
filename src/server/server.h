@@ -351,6 +351,10 @@ extern cvar_t *sv_showAverageBPS;           // net debugging
 
 extern cvar_t *g_gameType;
 
+#ifdef FEATURE_ODBC
+extern cvar_t *sv_odbcReady;  // Set true if connection tests pass
+#endif /* FEATURE_ODBC */
+
 // autodl
 extern cvar_t *sv_dl_maxRate;
 extern cvar_t *sv_dl_timeout;

@@ -64,6 +64,7 @@ option(FEATURE_OPENAL		"Enable OpenAL sound backend (client)"						OFF)
 option(FEATURE_FREETYPE		"Enable Freetype font library support (client)"				OFF)
 option(FEATURE_TRACKBASE	"Enable extended server statistics (server)"				ON)
 option(FEATURE_LUA			"Enable Lua support in game code"							ON)
+option(FEATURE_ODBC		"Enable ODBC support in server code"					OFF)
 option(FEATURE_MULTIVIEW	"Compile the mod files with multiview support (broken?!)"	OFF)
 option(FEATURE_ANTICHEAT	"Enable server side anti-wallhack code (experimental)"		ON)
 option(FEATURE_CURSES		"Enable PDCurses console"									OFF)
@@ -185,6 +186,10 @@ FILE(GLOB SERVER_SRC
 	"src/sys/con_log.c"
 	"src/qcommon/dl_main_stubs.c"
 )
+
+if(ODBC_FOUND)
+        LIST(APPEND SERVER_SRC "src/qcommon/q_odbc.c")
+endif(ODBC_FOUND)
 
 FILE(GLOB CLIENT_SRC
 	"src/server/*.c"
@@ -401,6 +406,14 @@ if(FEATURE_ANTICHEAT)
 	add_definitions(-DFEATURE_ANTICHEAT)
 endif(FEATURE_ANTICHEAT)
 
+if(FEATURE_ODBC)
+        find_package(ODBC REQUIRED)
+        list(APPEND SERVER_LIBRARIES ${ODBC_LIBRARIES})
+        list(APPEND SERVER_INCLUDE_DIRS ${ODBC_INCLUDE_DIRECTORIES})
+        add_definitions(-DFEATURE_ODBC)
+        message("-- Added ODBC Includes and Libraries to Server.")
+endif(FEATURE_ODBC)
+
 if(FEATURE_CURSES)
 	find_package(Curses REQUIRED)
 	set(CURSES_NEED_NCURSES 1) # Tells FindCurses that ncurses is required
@@ -442,6 +455,9 @@ if(BUILD_CLIENT)
 endif(BUILD_CLIENT)
 
 if(BUILD_SERVER)
+        message("-- Server Incl Dirs: ${SERVER_INCLUDE_DIRS}")
+        message("-- Server Libraries: ${SERVER_LIBRARIES}")
+        include_directories(${SERVER_INCLUDE_DIRS})
 	add_executable(etlded WIN32 ${COMMON_SRC} ${SERVER_SRC} ${PLATFORM_SRC})
 	target_link_libraries(etlded ${OS_LIBRARIES} ${SERVER_LIBRARIES})
 	set_target_properties(etlded PROPERTIES COMPILE_DEFINITIONS "DEDICATED")
