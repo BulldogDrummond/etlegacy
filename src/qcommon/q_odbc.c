@@ -54,7 +54,7 @@ void Com_ODBC_InitGameTest()
 	username = sv_odbcUsername->string;
 	password = sv_odbcPassword->string;
 
-	if (use_odbc = 0) {
+	if (use_odbc == 0) {
 		Com_Printf("ODBC Support Disabled.\n");
 		Cvar_Set("sv_odbcReady","0");
 		return;
