@@ -12,6 +12,7 @@ cvar_t *sv_odbcDSN;
 cvar_t *sv_odbcUsername;
 cvar_t *sv_odbcPassword;
 
+/* ODBC Error Handler */
 void Com_ODBC_Error(
 	char *fn,
 	SQLHANDLE handle,
@@ -29,12 +30,12 @@ void Com_ODBC_Error(
 	{
 		ret = SQLGetDiagRec(type, handle, ++i, state, &native, text, sizeof(text), &len );
 		if (SQL_SUCCEEDED(ret))
-			Com_Printf("  %s:%ld:%ld:%s\n", state, i, native, text);
+			Com_Printf("     %s:%ld:%ld:%s\n", state, i, native, text);
 	}
 	while( ret == SQL_SUCCESS );
 }
 
-/* TODO: This is basically just a function to test compile/link at the moment */
+/* TODO: This is basically just a function to test compile/link and basic functionality at the moment */
 void Com_ODBC_InitGameTest()
 {
 	sv_odbcEnable   = Cvar_Get("odbc_enable",   "0", CVAR_TEMP);
@@ -55,7 +56,7 @@ void Com_ODBC_InitGameTest()
 	password = sv_odbcPassword->string;
 
 	if (use_odbc == 0) {
-		Com_Printf("ODBC Support Disabled.\n");
+		Com_Printf("ODBC Info: ODBC Support Disabled.\n");
 		Cvar_Set("sv_odbcReady","0");
 		return;
 	}
@@ -65,9 +66,9 @@ void Com_ODBC_InitGameTest()
 	SQLHENV env;
 	SQLHDBC dbc;
 	SQLHSTMT stmt;
-	SQLRETURN ret; /* ODBC API return status */
-	SQLCHAR outstr[1024];
-	SQLSMALLINT outstrlen;
+	SQLRETURN ret;   /* ODBC API return status */
+	SQLSMALLINT columns; /* number of columns in result-set */
+	int row = 0;
 
 	/* Allocate an environment handle */
 	SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env);
@@ -76,34 +77,91 @@ void Com_ODBC_InitGameTest()
 	SQLSetEnvAttr(env, SQL_ATTR_ODBC_VERSION, (void *) SQL_OV_ODBC3, 0);
 
 	/* Allocate a connection handle */
-	Com_Printf("ODBC Allocating connection handle to %s as user %s.\n",dsnname,username);
+	Com_Printf("ODBC Info: Allocating connection handle to %s as user %s.\n",dsnname,username);
 	SQLAllocHandle(SQL_HANDLE_DBC, env, &dbc);
 
 	/* Connect to the DSN */
 	ret = SQLConnect(dbc, (SQLCHAR*) dsnname, SQL_NTS,
 		(SQLCHAR*) username, SQL_NTS, (SQLCHAR*) password, SQL_NTS);	
 
+	/* Allocate a statement handle */
+	Com_Printf("ODBC Info: Allocating statement handle for testing.\n");
+	SQLAllocHandle(SQL_HANDLE_STMT, dbc, &stmt);
+
 	if (SQL_SUCCEEDED(ret)) {
 		/* Report successful connection */
-		Com_Printf("ODBC Connected.\n");
+		Com_Printf("ODBC Info: Connected.\n");
 		if (ret == SQL_SUCCESS_WITH_INFO) {
 			Com_Printf("ODBC Driver reported the following:\n");
 			Com_ODBC_Error("SQLDriverConnect", dbc, SQL_HANDLE_DBC);
 		}
+
 		/* Set the cvar */
 		Cvar_Set("sv_odbcReady","1");
+
+		/* Display Driver Info */
+		SQLCHAR dbms_name[256], dbms_ver[256];
+		SQLUINTEGER getdata_support;
+		SQLUSMALLINT max_concur_act;
+		SQLSMALLINT string_len;
+
+		SQLGetInfo(dbc, SQL_DBMS_NAME, (SQLPOINTER)dbms_name, sizeof(dbms_name), NULL);
+		SQLGetInfo(dbc, SQL_DBMS_VER, (SQLPOINTER)dbms_ver, sizeof(dbms_ver), NULL);
+		SQLGetInfo(dbc, SQL_GETDATA_EXTENSIONS, (SQLPOINTER)&getdata_support, 0, 0);
+		SQLGetInfo(dbc, SQL_MAX_CONCURRENT_ACTIVITIES, &max_concur_act, 0, 0);
+
+		Com_Printf("ODBC Info: Database Server: %s %s\n", dbms_name,dbms_ver);
+		if (max_concur_act == 0) {
+			Com_Printf("ODBC Info: Max Concurrent Activities: No limit or undefined.\n");
+		} else {
+			Com_Printf("ODBC Info: Max Concurrent Activities: %u.\n", max_concur_act);
+		}
+		if (getdata_support & SQL_GD_ANY_ORDER) {
+			Com_Printf("ODBC Info: Columns can be retrieved in any order.\n");
+		} else {
+			Com_Printf("ODBC Info: Columns must be retrieved in order.\n");
+		}
+		if (getdata_support & SQL_GD_ANY_COLUMN) {
+			Com_Printf("ODBC Info: Can retrieve columns before last bound.\n");
+		} else {
+			Com_Printf("ODBC Info: Columns must be retrieved after last bound.\n");
+		}
+
+		/* Run a test query */
+		Com_Printf("ODBC Info: Running test query.\n");
+		if (SQLExecDirect(stmt, "SELECT ss_val FROM system_status WHERE ss_key = \"DB_Test\"", SQL_NTS) >= 0) {
+			SQLNumResultCols(stmt, &columns);
+			while (SQL_SUCCEEDED(ret = SQLFetch(stmt))) {
+				SQLUSMALLINT i;
+				Com_Printf("ODBC Info: Result rows: %i\n",row++);
+				for (i = 1; i <= columns; i++) {
+					SQLINTEGER indicator;
+					char buf[512];
+					ret = SQLGetData(stmt, i, SQL_C_CHAR, buf, sizeof(buf), &indicator);
+					if (SQL_SUCCEEDED(ret)) {
+						if (indicator == SQL_NULL_DATA) strcpy(buf, "NULL");
+						Com_Printf("ODBC Info: Query Result: %s\n",buf);
+					}
+				}
+				row++;
+			}
+		} else {
+			Com_Printf("ODBC Info: Query failed.\n");
+		}
+		SQLFreeHandle(SQL_HANDLE_STMT, stmt);
 		SQLDisconnect(dbc);		/* disconnect from driver */
 	} else {
 		/* Report failed connection */
-		Com_Printf("ODBC Failed to connect\n");
+		Com_Printf("ODBC Info: Failed to connect.\n");
 		Com_ODBC_Error("SQLDriverConnect", dbc, SQL_HANDLE_DBC);
 		/* Set the cvar */
 		Cvar_Set("sv_odbcReady","0");
 	}
+
 	/* free up allocated handles */
 	SQLFreeHandle(SQL_HANDLE_DBC, dbc);
 	SQLFreeHandle(SQL_HANDLE_ENV, env);
-	Com_Printf("ODBC Test Complete.\n");
+	Com_Printf("ODBC Info: Test Complete.\n");
 	return;
 }
 
