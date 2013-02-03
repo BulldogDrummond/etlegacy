@@ -138,6 +138,7 @@ void Com_ODBC_InitGameTest()
 
 		/* Run a test query */
 		Com_Printf("ODBC Info: Running test query.\n");
+		/* Use table from misc/db_schema.sql - tested using mysql for dsn */
 		char *query = "SELECT ss_val FROM server_status WHERE ss_key = \"DB_Test\"";
 		ret = SQLPrepare(stmt, (SQLCHAR *) query, strlen(query));
 		ret = SQLExecute(stmt);
@@ -150,7 +151,9 @@ void Com_ODBC_InitGameTest()
 					char buf[512];
 					ret = SQLGetData(stmt, i, SQL_C_CHAR, buf, sizeof(buf), &indicator);
 					if (SQL_SUCCEEDED(ret)) {
-						if (indicator == SQL_NULL_DATA) strcpy(buf, "NULL");
+						if (indicator == SQL_NULL_DATA) {
+							strcpy(buf, "NULL");
+						}
 						Com_Printf("ODBC Info: Query Result: %s\n",buf);
 					}
 				}
@@ -161,6 +164,7 @@ void Com_ODBC_InitGameTest()
 			Com_Printf("ODBC Info: Query failed.\n");
 			Com_ODBC_Error("TestQuery",stmt,SQL_HANDLE_STMT);
 		}
+		/* Free the statement handle and disconnect the DBC resource */
 		SQLFreeHandle(SQL_HANDLE_STMT, stmt);
 		SQLDisconnect(dbc);		/* disconnect from driver */
 	} else {
@@ -171,7 +175,7 @@ void Com_ODBC_InitGameTest()
 		Cvar_Set("sv_odbcReady","0");
 	}
 
-	/* free up allocated handles */
+	/* free up allocated handles for DBC and ENV */
 	SQLFreeHandle(SQL_HANDLE_DBC, dbc);
 	SQLFreeHandle(SQL_HANDLE_ENV, env);
 	Com_Printf("ODBC Info: Test Complete.\n");
