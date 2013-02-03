@@ -37,6 +37,7 @@ extern cvar_t *sv_odbcPassword;
 // Database functions
 void Com_ODBC_Error(char *fn, SQLHANDLE handle, SQLSMALLINT type);
 void Com_ODBC_InitGameTest();
+int Com_ODBC_Ready();
 
 #endif /* ifdef FEATURE_ODBC */
 

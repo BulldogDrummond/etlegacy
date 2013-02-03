@@ -35,7 +35,20 @@ void Com_ODBC_Error(
 	while( ret == SQL_SUCCESS );
 }
 
+/* This should be checked before any database operations are attempted. */
+int Com_ODBC_Ready()
+{
+	int db_ready;
+
+	cvar_t *dbTest = Cvar_Get("sv_dbReady", "0", CVAR_SERVERINFO | CVAR_ROM);
+	db_ready = dbTest->integer;
+
+	return db_ready;
+}
+
 /* TODO: This is basically just a function to test compile/link and basic functionality at the moment */
+/*       A test like this needs to be done at InitGame to set the ready cvar, but the common portions
+         should be separated into independant functions. */
 void Com_ODBC_InitGameTest()
 {
 	sv_odbcEnable   = Cvar_Get("odbc_enable",   "0", CVAR_TEMP);
@@ -68,7 +81,6 @@ void Com_ODBC_InitGameTest()
 	SQLHSTMT stmt;
 	SQLRETURN ret;   /* ODBC API return status */
 	SQLSMALLINT columns; /* number of columns in result-set */
-	int row = 0;
 
 	/* Allocate an environment handle */
 	SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env);
@@ -93,7 +105,7 @@ void Com_ODBC_InitGameTest()
 		Com_Printf("ODBC Info: Connected.\n");
 		if (ret == SQL_SUCCESS_WITH_INFO) {
 			Com_Printf("ODBC Driver reported the following:\n");
-			Com_ODBC_Error("SQLDriverConnect", dbc, SQL_HANDLE_DBC);
+			Com_ODBC_Error("SQLConnect", dbc, SQL_HANDLE_DBC);
 		}
 
 		/* Set the cvar */
@@ -129,11 +141,13 @@ void Com_ODBC_InitGameTest()
 
 		/* Run a test query */
 		Com_Printf("ODBC Info: Running test query.\n");
-		if (SQLExecDirect(stmt, "SELECT ss_val FROM system_status WHERE ss_key = \"DB_Test\"", SQL_NTS) >= 0) {
+		char *query = "SELECT ss_val FROM server_status WHERE ss_key = \"DB_Test\"";
+		ret = SQLPrepare(stmt, (SQLCHAR *) query, strlen(query));
+		ret = SQLExecute(stmt);
+		if (SQL_SUCCEEDED(ret)) {
 			SQLNumResultCols(stmt, &columns);
 			while (SQL_SUCCEEDED(ret = SQLFetch(stmt))) {
 				SQLUSMALLINT i;
-				Com_Printf("ODBC Info: Result rows: %i\n",row++);
 				for (i = 1; i <= columns; i++) {
 					SQLINTEGER indicator;
 					char buf[512];
@@ -143,10 +157,10 @@ void Com_ODBC_InitGameTest()
 						Com_Printf("ODBC Info: Query Result: %s\n",buf);
 					}
 				}
-				row++;
 			}
 		} else {
 			Com_Printf("ODBC Info: Query failed.\n");
+			Com_ODBC_Error("TestQuery",stmt,SQL_HANDLE_STMT);
 		}
 		SQLFreeHandle(SQL_HANDLE_STMT, stmt);
 		SQLDisconnect(dbc);		/* disconnect from driver */
