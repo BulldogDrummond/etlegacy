@@ -108,9 +108,6 @@ void Com_ODBC_InitGameTest()
 			Com_ODBC_Error("SQLConnect", dbc, SQL_HANDLE_DBC);
 		}
 
-		/* Set the cvar */
-		Cvar_Set("sv_odbcReady","1");
-
 		/* Display Driver Info */
 		SQLCHAR dbms_name[256], dbms_ver[256];
 		SQLUINTEGER getdata_support;
@@ -158,6 +155,8 @@ void Com_ODBC_InitGameTest()
 					}
 				}
 			}
+			/* Set the cvar */
+			Cvar_Set("sv_odbcReady","1");
 		} else {
 			Com_Printf("ODBC Info: Query failed.\n");
 			Com_ODBC_Error("TestQuery",stmt,SQL_HANDLE_STMT);
