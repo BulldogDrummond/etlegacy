@@ -75,6 +75,7 @@ cvar_t *cl_timedemo;
 cvar_t *cl_avidemo;
 cvar_t *cl_forceavidemo;
 cvar_t *cl_avidemotype;
+cvar_t *cl_aviMotionJpeg;
 
 cvar_t *cl_freelook;
 cvar_t *cl_sensitivity;
@@ -152,11 +153,7 @@ int            serverStatusCount;
 // Have we heard from the auto-update server this session?
 qboolean autoupdateChecked;
 qboolean autoupdateStarted;
-// moved from char* to array (was getting the char* from va(), broke on big downloads)
-char autoupdateFilename[MAX_QPATH];
-// "updates" shifted from -7
-#define AUTOUPDATE_DIR "ni]Zm^l"
-#define AUTOUPDATE_DIR_SHIFT 7
+#define AUTOUPDATE_DIR "update"
 
 void CL_CheckForResend(void);
 void CL_ShowIP_f(void);
@@ -1069,8 +1066,8 @@ void CL_Disconnect(qboolean showMainMenu)
 		*cls.downloadTempName = *cls.downloadName = 0;
 		Cvar_Set("cl_downloadName", "");
 
-		autoupdateStarted     = qfalse;
-		autoupdateFilename[0] = '\0';
+		autoupdateStarted = qfalse;
+		Cvar_Set("cl_updatefiles", "");
 	}
 
 	if (clc.demofile)
@@ -1532,6 +1529,17 @@ void CL_Vid_Restart_f(void)
 	// - so keep the value - feels like a bug for users
 	//com_expectedhunkusage = -1;
 
+	// Settings may have changed so stop recording now
+	if (CL_VideoRecording())
+	{
+		CL_CloseAVI();
+	}
+
+	/* Do we want to stop the recording of demos on vid_restart?
+	if(clc.demorecording)
+	    CL_StopRecord_f();
+	*/
+
 	// don't let them loop during the restart
 	S_StopAllSounds();
 	// shutdown the UI
@@ -1743,33 +1751,21 @@ void CL_WavStopRecord_f(void)
 
 //====================================================================
 
-/*
-=================
-CL_DownloadsComplete
-
-Called when all downloading has been completed
-=================
-*/
+/**
+ * @brief Called when all downloading has been completed
+ * Initiates update process after an update has been downloaded.
+ */
 void CL_DownloadsComplete(void)
 {
-
-#ifndef _WIN32
-	char *fs_write_path;
-#endif
-	char *fn;
-
-	// Auto-update (not finished yet)
+#ifdef FEATURE_AUTOUPDATE
+	// Auto-update
 	if (autoupdateStarted)
 	{
-
-		if (strlen(autoupdateFilename) > 4)
+		if (strlen(cl_updatefiles->string) > 4)
 		{
-#ifdef _WIN32
-			// win32's Sys_StartProcess prepends the current dir
-			fn = va("%s/%s", FS_ShiftStr(AUTOUPDATE_DIR, AUTOUPDATE_DIR_SHIFT), autoupdateFilename);
-#else
-			fs_write_path = Cvar_VariableString("fs_homepath");
-			fn            = FS_BuildOSPath(fs_write_path, FS_ShiftStr(AUTOUPDATE_DIR, AUTOUPDATE_DIR_SHIFT), autoupdateFilename);
+			char *fn;
+			fn = FS_BuildOSPath(Cvar_VariableString("fs_homepath"), AUTOUPDATE_DIR, cl_updatefiles->string);
+#ifndef _WIN32
 			Sys_Chmod(fn, S_IXUSR);
 #endif
 			// will either exit with a successful process spawn, or will Com_Error ERR_DROP
@@ -1779,23 +1775,23 @@ void CL_DownloadsComplete(void)
 				cls.bWWWDlDisconnected = qfalse;
 				CL_ClearStaticDownload();
 			}
+
 			Sys_StartProcess(fn, qtrue);
 		}
-
-		// NOTE - that code is never supposed to be reached?
-
 		autoupdateStarted = qfalse;
 
 		if (!cls.bWWWDlDisconnected)
 		{
 			CL_Disconnect(qtrue);
 		}
+
 		// we can reset that now
 		cls.bWWWDlDisconnected = qfalse;
 		CL_ClearStaticDownload();
 
 		return;
 	}
+#endif /* FEATURE_AUTOUPDATE */
 
 	// if we downloaded files we need to restart the file system
 	if (cls.downloadRestart)
@@ -1942,18 +1938,13 @@ void CL_NextDownload(void)
 	CL_DownloadsComplete();
 }
 
-/*
-=================
-CL_InitDownloads
-
-After receiving a valid game state, we valid the cgame and local zip files here
-and determine if we need to download them
-=================
-*/
+/**
+ * @brief After receiving a valid game state, we validate the cgame and
+ * local zip files here and determine if we need to download them
+ */
 void CL_InitDownloads(void)
 {
 	char missingfiles[1024];
-	char *dir = FS_ShiftStr(AUTOUPDATE_DIR, AUTOUPDATE_DIR_SHIFT);
 
 	// init some of the www dl data
 	clc.bWWWDl             = qfalse;
@@ -1965,10 +1956,19 @@ void CL_InitDownloads(void)
 	{
 		if (strlen(cl_updatefiles->string) > 4)
 		{
-			Q_strncpyz(autoupdateFilename, cl_updatefiles->string, sizeof(autoupdateFilename));
-			Q_strncpyz(clc.downloadList, va("@%s/%s@%s/%s", dir, cl_updatefiles->string, dir, cl_updatefiles->string), MAX_INFO_STRING);
-			cls.state = CA_CONNECTED;
-			CL_NextDownload();
+			clc.bWWWDl             = qtrue;
+			cls.bWWWDlDisconnected = qtrue;
+			cls.state == CA_CONNECTED;
+
+			// download format: @%s/%s@%s/%s
+			Q_strncpyz(clc.downloadList, cl_updatefiles->string, MAX_INFO_STRING);
+
+			if (!DL_BeginDownload(FS_BuildOSPath(Cvar_VariableString("fs_homepath"), AUTOUPDATE_DIR, cl_updatefiles->string),
+			                      va("%s/%s", UPDATE_SERVER_NAME, cl_updatefiles->string)))
+			{
+				Com_Printf(S_COLOR_RED "ERROR: Downloading new update failed.\n");
+			}
+
 			return;
 		}
 	}
@@ -2526,16 +2526,21 @@ void CL_ConnectionlessPacket(netadr_t from, msg_t *msg)
 	Com_DPrintf("Unknown connectionless packet command.\n");
 }
 
-/*
-=================
-CL_PacketEvent
-
-A packet has arrived from the main event loop
-=================
-*/
+/**
+ * @brief A packet has arrived from the main event loop
+ */
 void CL_PacketEvent(netadr_t from, msg_t *msg)
 {
-	int headerBytes;
+	int             headerBytes;
+	static qboolean autoupdateRedirected = qfalse;
+
+	// Update server doesn't understand netchan packets
+	if (autoupdateStarted && !autoupdateRedirected)
+	{
+		autoupdateRedirected = qtrue;
+		CL_InitDownloads();
+		return;
+	}
 
 	if (msg->cursize >= 4 && *( int * ) msg->data == -1)
 	{
@@ -2799,6 +2804,16 @@ void CL_Frame(int msec)
 			{
 			case 1:
 				Cbuf_ExecuteText(EXEC_NOW, "screenshotJPEG silent\n");
+				break;
+			case 2:
+				if (CL_VideoRecording())
+				{
+					CL_TakeVideoFrame();
+				}
+				else
+				{
+					Com_Printf("Error while recording avi, the file is not open.\n");
+				}
 				break;
 			default:
 				Cbuf_ExecuteText(EXEC_NOW, "screenshot silent\n");
@@ -3173,6 +3188,7 @@ void CL_CheckAutoUpdate(void)
 	autoupdateChecked = qtrue;
 }
 
+#ifdef FEATURE_AUTOUPDATE
 void CL_GetAutoUpdate(void)
 {
 	// Don't try and get an update if we haven't checked for one
@@ -3195,7 +3211,7 @@ void CL_GetAutoUpdate(void)
 	Cvar_Set("r_uiFullScreen", "0");
 
 	// toggle on all the download related cvars
-	Cvar_Set("cl_allowDownload", "1");    // general flag
+	Cvar_Set("cl_allowDownload", "1");  // general flag
 	Cvar_Set("cl_wwwDownload", "1");    // ftp/http support
 
 	// clear any previous "server full" type messages
@@ -3238,6 +3254,84 @@ void CL_GetAutoUpdate(void)
 
 	// server connection string
 	Cvar_Set("cl_currentServerAddress", "ET:L Update Server");
+}
+#endif /* FEATURE_AUTOUPDATE */
+
+/*
+===============
+CL_Video_f
+
+video
+video [filename]
+===============
+*/
+void CL_Video_f(void)
+{
+	char filename[MAX_OSPATH];
+	int  i, last;
+
+	if (!clc.demoplaying)
+	{
+		Com_Printf("The video command can only be used when playing back demos\n");
+		return;
+	}
+
+	cl_avidemotype->integer = 2;
+	if (cl_avidemo->integer == 0)
+	{
+		cl_avidemo->integer = 30;
+	}
+
+	if (Cmd_Argc() == 2)
+	{
+		// explicit filename
+		Com_sprintf(filename, MAX_OSPATH, "videos/%s.avi", Cmd_Argv(1));
+	}
+	else
+	{
+		// scan for a free filename
+		for (i = 0; i <= 9999; i++)
+		{
+			int a, b, c, d;
+
+			last = i;
+
+			a     = last / 1000;
+			last -= a * 1000;
+			b     = last / 100;
+			last -= b * 100;
+			c     = last / 10;
+			last -= c * 10;
+			d     = last;
+
+			Com_sprintf(filename, MAX_OSPATH, "videos/video%d%d%d%d.avi",
+			            a, b, c, d);
+
+			if (!FS_FileExists(filename))
+			{
+				break; // file doesn't exist
+			}
+		}
+
+		if (i > 9999)
+		{
+			Com_Printf(S_COLOR_RED "ERROR: no free file names to create video\n");
+			return;
+		}
+	}
+
+	CL_OpenAVIForWriting(filename);
+}
+
+/*
+===============
+CL_StopVideo_f
+===============
+*/
+void CL_StopVideo_f(void)
+{
+	cl_avidemo->integer = 0;
+	CL_CloseAVI();
 }
 
 /*
@@ -3360,6 +3454,9 @@ void CL_InitRef(void)
 	ri.CIN_PlayCinematic   = CIN_PlayCinematic;
 	ri.CIN_RunCinematic    = CIN_RunCinematic;
 
+	ri.CL_VideoRecording     = CL_VideoRecording;
+	ri.CL_WriteAVIVideoFrame = CL_WriteAVIVideoFrame;
+
 //     ri.IN_Init = IN_Init;
 //     ri.IN_Shutdown = IN_Shutdown;
 //     ri.IN_Restart = IN_Restart;
@@ -3435,7 +3532,7 @@ void CL_Init(void)
 	// register our variables
 	cl_noprint    = Cvar_Get("cl_noprint", "0", 0);
 	cl_motd       = Cvar_Get("cl_motd", "1", 0);
-	cl_autoupdate = Cvar_Get("cl_autoupdate", "0", CVAR_ARCHIVE);
+	cl_autoupdate = Cvar_Get("cl_autoupdate", "1", CVAR_ARCHIVE);
 
 	cl_timeout = Cvar_Get("cl_timeout", "60", 0);
 
@@ -3452,10 +3549,11 @@ void CL_Init(void)
 	cl_activeAction       = Cvar_Get("activeAction", "", CVAR_TEMP);
 	cl_autorecord         = Cvar_Get("cl_autorecord", "0", CVAR_TEMP);
 
-	cl_timedemo     = Cvar_Get("timedemo", "0", 0);
-	cl_avidemo      = Cvar_Get("cl_avidemo", "0", 0);
-	cl_forceavidemo = Cvar_Get("cl_forceavidemo", "0", 0);
-	cl_avidemotype  = Cvar_Get("cl_avidemotype", "0", CVAR_TEMP);
+	cl_timedemo      = Cvar_Get("timedemo", "0", 0);
+	cl_avidemo       = Cvar_Get("cl_avidemo", "0", 0);
+	cl_forceavidemo  = Cvar_Get("cl_forceavidemo", "0", 0);
+	cl_avidemotype   = Cvar_Get("cl_avidemotype", "0", CVAR_TEMP);
+	cl_aviMotionJpeg = Cvar_Get("cl_avimotionjpeg", "0", CVAR_TEMP);
 
 	rconAddress = Cvar_Get("rconAddress", "", 0);
 
@@ -3611,6 +3709,10 @@ void CL_Init(void)
 
 	Cmd_AddCommand("wav_record", CL_WavRecord_f);
 	Cmd_AddCommand("wav_stoprecord", CL_WavStopRecord_f);
+
+	//Avi recording
+	Cmd_AddCommand("video", CL_Video_f);
+	Cmd_AddCommand("stopvideo", CL_StopVideo_f);
 
 	CL_InitRef();
 
@@ -3934,7 +4036,9 @@ void CL_UpdateInfoPacket(netadr_t from)
 	if (!Q_stricmp(cl_updateavailable->string, "1"))
 	{
 		Cvar_Set("cl_updatefiles", Cmd_Argv(2));
+#ifdef FEATURE_AUTOUPDATE
 		VM_Call(uivm, UI_SET_ACTIVE_MENU, UIMENU_WM_AUTOUPDATE);
+#endif /* FEATURE_AUTOUPDATE */
 	}
 }
 

@@ -11,7 +11,7 @@
 cmake_minimum_required(VERSION 2.6)
 
 project(ETLEGACY C CXX)
-set(ETLEGACY_VERSION "2.70rc1")
+set(ETLEGACY_VERSION "2.70rc1-dirty")
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
 include(Build)
@@ -68,6 +68,7 @@ option(FEATURE_ODBC		"Enable ODBC support in server code"					OFF)
 option(FEATURE_MULTIVIEW	"Compile the mod files with multiview support (broken?!)"	OFF)
 option(FEATURE_ANTICHEAT	"Enable server side anti-wallhack code (experimental)"		ON)
 option(FEATURE_CURSES		"Enable PDCurses console"									OFF)
+option(FEATURE_AUTOUPDATE	"Enable updater which downloads latest ET:L files"			ON)
 
 if((WIN32 OR UNIX) AND NOT CMAKE_SYSTEM MATCHES "Darwin")
 	option(FEATURE_OMNIBOT	"Enable omnibot build in mod code (Win & Linux server only!)"	OFF)
@@ -151,6 +152,7 @@ endif(NOT CMAKE_SYSTEM MATCHES "Darwin")
 
 FILE(GLOB COMMON_SRC
 	"src/qcommon/*.c"
+	"src/qcommon/*.h"
 )
 
 FILE(GLOB COMMON_SRC_REMOVE
@@ -179,9 +181,13 @@ endif()
 
 FILE(GLOB SERVER_SRC
 	"src/server/*.c"
+	"src/server/*.h"
 	"src/null/*.c"
+	"src/null/*.h"
 	"src/botlib/be*.c"
+	"src/botlib/be*.h"
 	"src/botlib/l_*.c"
+	"src/botlib/l_*.h"
 	"src/sys/sys_main.c"
 	"src/sys/con_log.c"
 	"src/qcommon/dl_main_stubs.c"
@@ -193,17 +199,24 @@ endif(ODBC_FOUND)
 
 FILE(GLOB CLIENT_SRC
 	"src/server/*.c"
+	"src/server/*.h"
 	"src/client/*.c"
+	"src/client/*.h"
 	"src/botlib/be*.c"
+	"src/botlib/be*.h"
 	"src/botlib/l_*.c"
+	"src/botlib/l_*.h"
 	"src/sys/sys_main.c"
 	"src/sys/con_log.c"
 	"src/renderer/*.c"
+	"src/renderer/*.h"
 	"src/sdl/*.c"
+	"src/sdl/*.h"
 )
 
 FILE(GLOB CGAME_SRC
 	"src/cgame/*.c"
+	"src/cgame/*.h"
 	"src/qcommon/q_math.c"
 	"src/qcommon/q_shared.c"
 	"src/ui/ui_shared.c"
@@ -212,6 +225,7 @@ FILE(GLOB CGAME_SRC
 
 FILE(GLOB QAGAME_SRC
 	"src/game/*.c"
+	"src/game/*.h"
 	"src/game/sha-1/sha1.c"
 	"src/qcommon/q_math.c"
 	"src/qcommon/q_shared.c"
@@ -219,11 +233,38 @@ FILE(GLOB QAGAME_SRC
 
 FILE(GLOB UI_SRC
 	"src/ui/*.c"
+	"src/ui/*.h"
 	"src/qcommon/q_math.c"
 	"src/qcommon/q_shared.c"
 	"src/game/bg_campaign.c"
 	"src/game/bg_classes.c"
 	"src/game/bg_misc.c"
+)
+
+FILE(GLOB RENDERER_FILES
+	"src/renderer/*.c"
+)
+
+FILE(GLOB CLIENT_FILES
+	"src/client/*.c"
+)
+
+FILE(GLOB SERVER_FILES
+	"src/server/*.c"
+)
+
+FILE(GLOB SYSTEM_FILES
+	"src/sys/sys_main.c"
+	"src/sys/con_log.c"
+)
+
+FILE(GLOB SDL_FILES
+	"src/sdl/*.c"
+)
+
+FILE(GLOB BOTLIB_FILES
+	"src/botlib/be*.c"
+	"src/botlib/l_*.c"
 )
 
 # Version generation
@@ -320,6 +361,10 @@ if(BUILD_CLIENT)
 	else(FEATURE_CURL)
 		set(CLIENT_SRC ${CLIENT_SRC} "src/qcommon/dl_main_stubs.c")
 	endif(FEATURE_CURL)
+
+	if(FEATURE_AUTOUPDATE)
+		add_definitions(-DFEATURE_AUTOUPDATE)
+	endif(FEATURE_AUTOUPDATE)
 
 	if(FEATURE_FREETYPE)
 		find_package(Freetype REQUIRED)
@@ -431,6 +476,14 @@ include_directories(${PROJECT_BINARY_DIR}/include) # git_version.h
 
 if(BUILD_CLIENT)
 	add_executable(etl WIN32 ${COMMON_SRC} ${CLIENT_SRC} ${PLATFORM_SRC})
+	source_group("Source Files\\Renderer" FILES ${RENDERER_FILES})
+	source_group("Source Files\\Client" FILES ${CLIENT_FILES})
+	source_group("Source Files\\Server" FILES ${SERVER_FILES})
+	source_group("Source Files\\System" FILES ${SYSTEM_FILES})
+	source_group("Source Files\\SDL" FILES ${SDL_FILES})
+	source_group("Source Files\\Botlib" FILES ${BOTLIB_FILES})
+	source_group("Source Files\\Common" FILES ${COMMON_SRC})
+	source_group("Source Files\\Platform" FILES ${PLATFORM_SRC})
 	include_directories(${CLIENT_INCLUDE_DIRS})
 	if(BUNDLED_SDL)
 		add_dependencies(etl bundled_sdl)
@@ -517,15 +570,15 @@ if(BUILD_MOD)
 	# etl_bin.pk3
 	#
 	if(BUILD_MOD_PK3)
-		add_custom_target(mod_pk3 ALL DEPENDS legacy/etl_bin.pk3)
+		add_custom_target(mod_pk3 ALL DEPENDS legacy/etl_bin_${ETL_CMAKE_VERSION_SHORT}.pk3)
 		add_custom_command(
-			OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/legacy/etl_bin.pk3
-			COMMAND zip etl_bin.pk3 cgame${LIB_SUFFIX}${ARCH}* ui${LIB_SUFFIX}${ARCH}*
+			OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/legacy/etl_bin_${ETL_CMAKE_VERSION_SHORT}.pk3
+			COMMAND zip etl_bin_${ETL_CMAKE_VERSION_SHORT}.pk3 cgame${LIB_SUFFIX}${ARCH}* ui${LIB_SUFFIX}${ARCH}*
 			DEPENDS cgame${LIB_SUFFIX}${ARCH} ui${LIB_SUFFIX}${ARCH}
 			WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/legacy/
 		)
 
-		install(FILES ${CMAKE_CURRENT_BINARY_DIR}/legacy/etl_bin.pk3
+		install(FILES ${CMAKE_CURRENT_BINARY_DIR}/legacy/etl_bin_${ETL_CMAKE_VERSION_SHORT}.pk3
 			DESTINATION "${INSTALL_DEFAULT_MODDIR}/legacy"
 		)
 	endif()
@@ -534,11 +587,11 @@ endif(BUILD_MOD)
 if(BUILD_PAK3_PK3)
 	add_custom_target(
 		pak3_pk3 ALL
-		COMMAND zip -r ${CMAKE_CURRENT_BINARY_DIR}/legacy/pak3.pk3 *
+		COMMAND zip -r ${CMAKE_CURRENT_BINARY_DIR}/legacy/pak3_${ETL_CMAKE_VERSION_SHORT}.pk3 *
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/etmain/
 	)
 
-	install(FILES ${CMAKE_CURRENT_BINARY_DIR}/legacy/pak3.pk3
+	install(FILES ${CMAKE_CURRENT_BINARY_DIR}/legacy/pak3_${ETL_CMAKE_VERSION_SHORT}.pk3
 		DESTINATION "${INSTALL_DEFAULT_MODDIR}/legacy"
 	)
 endif(BUILD_PAK3_PK3)
@@ -547,16 +600,15 @@ if(INSTALL_OMNIBOT)
 	if(UNIX AND NOT CMAKE_SYSTEM MATCHES "Darwin")
 		message(STATUS "Installing Omni-Bot")
 
-		# Note: used zip (16MB) doesn't contain windows, incomplete nav- and other unwanted files
-		# FIXME: change to tar or rar ...
-		set(ETLEGACY_OMNIBOT_L_DL_URL "http://mirror.etlegacy.com/omnibot/OmniBot_ETLegacy_Linux_r2497.zip")
+		# Note: used tar (16MB) doesn't contain windows, incomplete nav- and other unwanted files
+		set(ETLEGACY_OMNIBOT_L_DL_URL "http://mirror.etlegacy.com/omnibot/omnibot-linux-latest.tar.gz")
 
-		message(STATUS "Downloading Omni-Bot to ${CMAKE_CURRENT_BINARY_DIR}/omnibot.zip")
-		file(DOWNLOAD ${ETLEGACY_OMNIBOT_L_DL_URL} "${CMAKE_CURRENT_BINARY_DIR}/omnibot.zip")
+		message(STATUS "Downloading Omni-Bot to ${CMAKE_CURRENT_BINARY_DIR}/omnibot-linux-latest.tar.gz")
+		file(DOWNLOAD ${ETLEGACY_OMNIBOT_L_DL_URL} "${CMAKE_CURRENT_BINARY_DIR}/omnibot-linux-latest.tar.gz")
 
 		message(STATUS "Unzipping Omni-Bot to ${CMAKE_CURRENT_BINARY_DIR}/omnibot")
 		execute_process(
-			COMMAND unzip -o -q ${CMAKE_CURRENT_BINARY_DIR}/omnibot.zip -domnibot
+			COMMAND tar -xf ${CMAKE_CURRENT_BINARY_DIR}/omnibot-linux-latest.tar.gz
 			WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 		)
 
@@ -634,7 +686,7 @@ if(ET_FS_BASEPATH)
 		PERMISSIONS OWNER_WRITE OWNER_READ
 	)
 	
-	if (ET_KEY)
+	if(ET_KEY)
 		install(FILES "${ET_FS_BASEPATH}/etmain/etkey"
 			DESTINATION "${INSTALL_DEFAULT_MODDIR}/etmain"
 			PERMISSIONS OWNER_WRITE OWNER_READ

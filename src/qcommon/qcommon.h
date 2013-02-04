@@ -737,13 +737,13 @@ extern int cl_connectedToPureServer;
 qboolean FS_CL_ExtractFromPakFile(const char *base, const char *gamedir, const char *filename);
 #endif
 
-char *FS_ShiftStr(const char *string, int shift);
-
 void FS_CopyFile(char *fromOSPath, char *toOSPath);
 
 qboolean FS_VerifyPak(const char *pak);
 
 qboolean FS_Unzip(char *filename, qboolean quiet);
+
+void FS_HomeRemove(const char *homePath);
 
 /*
 ==============================================================
@@ -794,9 +794,6 @@ typedef enum
 	    CF_SSE2      = 1 << 6,
 	    CF_ALTIVEC   = 1 << 7
 } cpuFeatures_t;
-
-// max string you can send to a Com_Printf / Com_DPrintf (above gets truncated)
-#define MAXPRINTMSG 4096
 
 char *CopyString(const char *in);
 void        Info_Print(const char *s);
@@ -996,7 +993,9 @@ void CL_StartHunkUsers(void);
 // start all the client stuff using the hunk
 
 void CL_CheckAutoUpdate(void);
+#ifdef FEATURE_AUTOUPDATE
 void CL_GetAutoUpdate(void);
+#endif
 
 void Key_KeynameCompletion(void (*callback)(const char *s));
 // for keyname autocompletion
