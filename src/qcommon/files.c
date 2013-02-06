@@ -514,11 +514,17 @@ qboolean FS_CreatePath(char *OSPath)
  */
 void FS_CopyFile(char *fromOSPath, char *toOSPath)
 {
-	FILE *f;
-	int  len;
-	byte *buf;
+	FILE   *f;
+	size_t len;
+	byte   *buf;
 
-	Com_Printf("copy %s to %s\n", fromOSPath, toOSPath);
+	if ((!fromOSPath || fromOSPath[0] == '\0') || (!toOSPath || toOSPath[0] == '\0'))
+	{
+		Com_Printf(S_COLOR_YELLOW "WARNING: cannot copy files. Empty path passed to FS_CopyFile\n");
+		return;
+	}
+
+	Com_Printf("Copying %s to %s\n", fromOSPath, toOSPath);
 
 	if (strstr(fromOSPath, "journal.dat") || strstr(fromOSPath, "journaldata.dat"))
 	{
@@ -555,7 +561,7 @@ void FS_CopyFile(char *fromOSPath, char *toOSPath)
 	f = fopen(toOSPath, "wb");
 	if (!f)
 	{
-		free(buf);      //DAJ free as well
+		free(buf);
 		return;
 	}
 	if (fwrite(buf, 1, len, f) != len)
@@ -1539,7 +1545,6 @@ int FS_OSStatFile(char *ospath)
 ==============
 FS_Delete
 
-This was not in the 1.30 filesystem code
 using fs_homepath for the file to remove
 ==============
 */

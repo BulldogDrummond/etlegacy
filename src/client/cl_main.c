@@ -1067,7 +1067,7 @@ void CL_Disconnect(qboolean showMainMenu)
 		Cvar_Set("cl_downloadName", "");
 
 		autoupdateStarted = qfalse;
-		Cvar_Set("cl_updatefiles", "");
+		// TODO: clean autoupdate cvars
 	}
 
 	if (clc.demofile)
@@ -1532,6 +1532,8 @@ void CL_Vid_Restart_f(void)
 	// Settings may have changed so stop recording now
 	if (CL_VideoRecording())
 	{
+		//Stop recording and close the avi file before vid_restart
+		Cvar_Set("cl_avidemo","0");
 		CL_CloseAVI();
 	}
 
@@ -1763,27 +1765,34 @@ void CL_DownloadsComplete(void)
 	{
 		if (strlen(cl_updatefiles->string) > 4)
 		{
-			char *fn;
-			fn = FS_BuildOSPath(Cvar_VariableString("fs_homepath"), AUTOUPDATE_DIR, cl_updatefiles->string);
-#ifndef _WIN32
-			Sys_Chmod(fn, S_IXUSR);
-#endif
-			// will either exit with a successful process spawn, or will Com_Error ERR_DROP
-			// so we need to clear the disconnected download data if needed
-			if (cls.bWWWDlDisconnected)
-			{
-				cls.bWWWDlDisconnected = qfalse;
-				CL_ClearStaticDownload();
-			}
-
-			Sys_StartProcess(fn, qtrue);
+			CL_InitDownloads();
+			return;
 		}
+
+		/*
+		char *fn;
+		fn = FS_BuildOSPath(Cvar_VariableString("fs_homepath"), AUTOUPDATE_DIR, cl_updatefiles->string);
+		#ifndef _WIN32
+		Sys_Chmod(fn, S_IXUSR);
+		#endif
+		// will either exit with a successful process spawn, or will Com_Error ERR_DROP
+		// so we need to clear the disconnected download data if needed
+		if (cls.bWWWDlDisconnected)
+		{
+		    cls.bWWWDlDisconnected = qfalse;
+		    CL_ClearStaticDownload();
+		}
+
+		Sys_StartProcess(fn, qtrue);
+
+		// reinitialize the filesystem if the game directory or checksum has changed
+		// - after Legacy mod update
+		FS_ConditionalRestart(clc.checksumFeed);
+		*/
+
 		autoupdateStarted = qfalse;
 
-		if (!cls.bWWWDlDisconnected)
-		{
-			CL_Disconnect(qtrue);
-		}
+		CL_Disconnect(qtrue);
 
 		// we can reset that now
 		cls.bWWWDlDisconnected = qfalse;
@@ -1952,27 +1961,67 @@ void CL_InitDownloads(void)
 	cls.bWWWDlDisconnected = qfalse;
 	CL_ClearStaticDownload();
 
+#ifdef FEATURE_AUTOUPDATE
 	if (autoupdateStarted && NET_CompareAdr(cls.autoupdateServer, clc.serverAddress))
 	{
 		if (strlen(cl_updatefiles->string) > 4)
 		{
+			char *updateFile;
+			char updateFilesRemaining[MAX_TOKEN_CHARS] = "";
+
 			clc.bWWWDl             = qtrue;
 			cls.bWWWDlDisconnected = qtrue;
-			cls.state == CA_CONNECTED;
 
-			// download format: @%s/%s@%s/%s
-			Q_strncpyz(clc.downloadList, cl_updatefiles->string, MAX_INFO_STRING);
+			updateFile = strtok(cl_updatefiles->string, ";");
 
-			if (!DL_BeginDownload(FS_BuildOSPath(Cvar_VariableString("fs_homepath"), AUTOUPDATE_DIR, cl_updatefiles->string),
-			                      va("%s/%s", UPDATE_SERVER_NAME, cl_updatefiles->string)))
+			if (updateFile == NULL)
 			{
-				Com_Printf(S_COLOR_RED "ERROR: Downloading new update failed.\n");
+				Com_Error(ERR_AUTOUPDATE, "Could not parse update string.\n");
 			}
+			else
+			{
+				// download format: @remotename@localname
+				Q_strncpyz(clc.downloadList, va("@%s@%s", updateFile, updateFile), MAX_INFO_STRING);
+				Q_strncpyz(cls.originalDownloadName, updateFile, sizeof(cls.originalDownloadName));
+				Q_strncpyz(cls.downloadName, va("%s/%s", UPDATE_SERVER_NAME, updateFile), sizeof(cls.downloadName));
+				Q_strncpyz(cls.downloadTempName,
+				           FS_BuildOSPath(Cvar_VariableString("fs_homepath"), AUTOUPDATE_DIR, va("%s.tmp", cls.originalDownloadName)),
+				           sizeof(cls.downloadTempName));
+				// TODO: add file size, so UI can show progress bar
+				//Cvar_SetValue("cl_downloadSize", clc.downloadSize);
 
-			return;
+				if (!DL_BeginDownload(cls.downloadTempName, cls.downloadName))
+				{
+					Com_Error(ERR_AUTOUPDATE, "Could not download an update file: \"%s\"\n", cls.downloadName);
+					clc.bWWWDlAborting = qtrue;
+				}
+
+				while (1)
+				{
+					updateFile = strtok(NULL, ";");
+
+					if (updateFile == NULL)
+					{
+						break;
+					}
+
+					Q_strcat(updateFilesRemaining, sizeof(updateFilesRemaining), va("%s;", updateFile));
+				}
+
+				if (strlen(updateFilesRemaining) > 4)
+				{
+					Cvar_Set("cl_updatefiles", updateFilesRemaining);
+				}
+				else
+				{
+					Cvar_Set("cl_updatefiles", "");
+				}
+				return;
+			}
 		}
 	}
 	else
+#endif /* FEATURE_AUTOUPDATE */
 	{
 		// whatever autodownlad configuration, store missing files in a cvar, use later in the ui maybe
 		if (FS_ComparePaks(missingfiles, sizeof(missingfiles), qfalse))
@@ -2166,21 +2215,18 @@ void CL_MotdPacket(netadr_t from)
 	Cvar_Set("cl_motdString", challenge);
 }
 
-/*
-===================
-CL_PrintPackets
-
-an OOB message from server, with potential markups
-print OOB are the only messages we handle markups in
-[err_dialog]: used to indicate that the connection should be aborted
-  no further information, just do an error diagnostic screen afterwards
-[err_prot]: HACK. This is a protocol error. The client uses a custom
-  protocol error message (client sided) in the diagnostic window.
-  The space for the error message on the connection screen is limited
-  to 256 chars.
-===================
-*/
-void CL_PrintPacket(netadr_t from, msg_t *msg)
+/**
+ * @brief an OOB message from server, with potential markups.
+ * Print OOB are the only messages we handle markups in.
+ *
+ * [err_dialog]: Used to indicate that the connection should be aborted. No
+ *               further information, just do an error diagnostic screen afterwards.
+ * [err_prot]:   This is a protocol error. The client uses a custom protocol error
+ *               message (client sided) in the diagnostic window.
+ * ET://         Redirects client to another server.
+ * The space for the error message on the connection screen is limited to 256 chars.
+ */
+void CL_PrintPacket(msg_t *msg)
 {
 	char *s;
 	s = MSG_ReadBigString(msg);
@@ -2497,7 +2543,11 @@ void CL_ConnectionlessPacket(netadr_t from, msg_t *msg)
 	// echo request from server
 	if (!Q_stricmp(c, "print"))
 	{
-		CL_PrintPacket(from, msg);
+		// NOTE: we may have to add exceptions for auth and update servers
+		if (NET_CompareAdr(from, clc.serverAddress))
+		{
+			CL_PrintPacket(msg);
+		}
 		return;
 	}
 
@@ -2531,16 +2581,20 @@ void CL_ConnectionlessPacket(netadr_t from, msg_t *msg)
  */
 void CL_PacketEvent(netadr_t from, msg_t *msg)
 {
-	int             headerBytes;
+	int headerBytes;
+
+#ifdef FEATURE_AUTOUPDATE
 	static qboolean autoupdateRedirected = qfalse;
 
 	// Update server doesn't understand netchan packets
-	if (autoupdateStarted && !autoupdateRedirected)
+	if (NET_CompareAdr(cls.autoupdateServer, clc.serverAddress)
+	    && autoupdateStarted && !autoupdateRedirected)
 	{
 		autoupdateRedirected = qtrue;
 		CL_InitDownloads();
 		return;
 	}
+#endif /* FEATURE_AUTOUPDATE */
 
 	if (msg->cursize >= 4 && *( int * ) msg->data == -1)
 	{
@@ -2776,6 +2830,110 @@ qboolean CL_WWWBadChecksum(const char *pakname)
 
 /*
 ==================
+CL_StartVideoRecording
+
+This function will be called when the AVI recording will start either by video or cl_avidemo commands
+==================
+*/
+void CL_StartVideoRecording(const char *aviname)
+{
+	char filename[MAX_OSPATH];
+	int  i, last;
+
+	if (!aviname || aviname == '\0')
+	{
+		for (i = 0; i <= 9999; i++)
+		{
+			int a, b, c, d;
+
+			last = i;
+
+			a     = last / 1000;
+			last -= a * 1000;
+			b     = last / 100;
+			last -= b * 100;
+			c     = last / 10;
+			last -= c * 10;
+			d     = last;
+			Com_Printf("videos/%s%d%d%d%d.avi", clc.demoName, a, b, c, d);
+			Com_sprintf(filename, MAX_OSPATH, "videos/%s%d%d%d%d.avi", clc.demoName, a, b, c, d);
+
+			if (!FS_FileExists(filename))
+			{
+				break; // file doesn't exist
+			}
+		}
+
+		if (i > 9999)
+		{
+			Com_Printf(S_COLOR_RED "ERROR: no free file names to create video\n");
+			return;
+		}
+		CL_OpenAVIForWriting(filename);
+	}
+	else
+	{
+		CL_OpenAVIForWriting(aviname);
+	}
+}
+
+/*
+===============
+CL_Video_f
+
+video
+video [filename]
+===============
+*/
+void CL_Video_f(void)
+{
+	char filename[MAX_OSPATH];
+
+	if (!clc.demoplaying)
+	{
+		Com_Printf("The video command can only be used when playing back demos\n");
+		return;
+	}
+
+	cl_avidemotype->integer = 2;
+	if (cl_avidemo->integer == 0)
+	{
+		cl_avidemo->integer = 30;
+	}
+
+	if (Cmd_Argc() > 1)
+	{
+		// explicit filename
+		Com_sprintf(filename, MAX_OSPATH, "videos/%s.avi", Cmd_Argv(1));
+		if (Cmd_Argc() == 3)
+		{
+			Cvar_Set("cl_avidemo", Cmd_Argv(2));
+		}
+		CL_StartVideoRecording(filename);
+	}
+	else
+	{
+		CL_StartVideoRecording(NULL);
+	}
+}
+
+/*
+===============
+CL_StopVideo_f
+===============
+*/
+void CL_StopVideo_f(void)
+{
+	cl_avidemo->integer = 0;
+	/*
+	*We need to call something like S_Base_StopAllSounds();
+	*here to stop the stuttering. Something it crashes the game.
+	*/
+	CL_CloseAVI();
+}
+
+/*
+==================
 CL_Frame
 ==================
 */
@@ -2812,7 +2970,9 @@ void CL_Frame(int msec)
 				}
 				else
 				{
-					Com_Printf("Error while recording avi, the file is not open.\n");
+					CL_StartVideoRecording(NULL);
+					CL_TakeVideoFrame();
+					//Com_Printf("Error while recording avi, the file is not open.\n");
 				}
 				break;
 			default:
@@ -2825,6 +2985,10 @@ void CL_Frame(int msec)
 		{
 			msec = 1;
 		}
+	}
+	else if (cl_avidemo->integer == 0 && CL_VideoRecording())
+	{
+		CL_CloseAVI();
 	}
 
 	// save the msec before checking pause
@@ -3258,83 +3422,6 @@ void CL_GetAutoUpdate(void)
 #endif /* FEATURE_AUTOUPDATE */
 
 /*
-===============
-CL_Video_f
-
-video
-video [filename]
-===============
-*/
-void CL_Video_f(void)
-{
-	char filename[MAX_OSPATH];
-	int  i, last;
-
-	if (!clc.demoplaying)
-	{
-		Com_Printf("The video command can only be used when playing back demos\n");
-		return;
-	}
-
-	cl_avidemotype->integer = 2;
-	if (cl_avidemo->integer == 0)
-	{
-		cl_avidemo->integer = 30;
-	}
-
-	if (Cmd_Argc() == 2)
-	{
-		// explicit filename
-		Com_sprintf(filename, MAX_OSPATH, "videos/%s.avi", Cmd_Argv(1));
-	}
-	else
-	{
-		// scan for a free filename
-		for (i = 0; i <= 9999; i++)
-		{
-			int a, b, c, d;
-
-			last = i;
-
-			a     = last / 1000;
-			last -= a * 1000;
-			b     = last / 100;
-			last -= b * 100;
-			c     = last / 10;
-			last -= c * 10;
-			d     = last;
-
-			Com_sprintf(filename, MAX_OSPATH, "videos/video%d%d%d%d.avi",
-			            a, b, c, d);
-
-			if (!FS_FileExists(filename))
-			{
-				break; // file doesn't exist
-			}
-		}
-
-		if (i > 9999)
-		{
-			Com_Printf(S_COLOR_RED "ERROR: no free file names to create video\n");
-			return;
-		}
-	}
-
-	CL_OpenAVIForWriting(filename);
-}
-
-/*
-===============
-CL_StopVideo_f
-===============
-*/
-void CL_StopVideo_f(void)
-{
-	cl_avidemo->integer = 0;
-	CL_CloseAVI();
-}
-
-/*
 ============
 CL_RefMalloc
 ============
@@ -3552,7 +3639,7 @@ void CL_Init(void)
 	cl_timedemo      = Cvar_Get("timedemo", "0", 0);
 	cl_avidemo       = Cvar_Get("cl_avidemo", "0", 0);
 	cl_forceavidemo  = Cvar_Get("cl_forceavidemo", "0", 0);
-	cl_avidemotype   = Cvar_Get("cl_avidemotype", "0", CVAR_TEMP);
+	cl_avidemotype   = Cvar_Get("cl_avidemotype", "0", CVAR_ARCHIVE);
 	cl_aviMotionJpeg = Cvar_Get("cl_avimotionjpeg", "0", CVAR_TEMP);
 
 	rconAddress = Cvar_Get("rconAddress", "", 0);
@@ -3877,7 +3964,6 @@ void CL_ServerInfoPacket(netadr_t from, msg_t *msg)
 {
 	int  i, type;
 	char info[MAX_INFO_STRING];
-	char *str;
 	char *infoString;
 	int  prot;
 	char *gameName;
@@ -3926,7 +4012,6 @@ void CL_ServerInfoPacket(netadr_t from, msg_t *msg)
 			{
 			case NA_BROADCAST:
 			case NA_IP:
-				str  = "udp";
 				type = 1;
 				break;
 			case NA_IP6:
@@ -3934,7 +4019,6 @@ void CL_ServerInfoPacket(netadr_t from, msg_t *msg)
 				break;
 
 			default:
-				str  = "???";
 				type = 0;
 				break;
 			}
@@ -4833,7 +4917,7 @@ CL_AddToLimboChat
 void CL_AddToLimboChat(const char *str)
 {
 	int  len = 0;
-	char *p, *ls;
+	char *p;
 
 	int i;
 
@@ -4849,7 +4933,6 @@ void CL_AddToLimboChat(const char *str)
 	p  = cl.limboChatMsgs[0];
 	*p = 0;
 
-	ls = NULL;
 	while (*str)
 	{
 		if (len > LIMBOCHAT_WIDTH - 1)
@@ -4862,10 +4945,6 @@ void CL_AddToLimboChat(const char *str)
 			*p++ = *str++;
 			*p++ = *str++;
 			continue;
-		}
-		if (*str == ' ')
-		{
-			ls = p;
 		}
 		*p++ = *str++;
 		len++;
@@ -5148,8 +5227,8 @@ CL_CheckTranslationString
 */
 qboolean CL_CheckTranslationString(char *original, char *translated)
 {
-	char format_org[128], format_trans[128];
-	int  len, i;
+	char   format_org[128], format_trans[128];
+	size_t i, len;
 
 	memset(format_org, 0, 128);
 	memset(format_trans, 0, 128);

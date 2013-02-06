@@ -2553,62 +2553,6 @@ gitem_t *BG_FindItemForClassName(const char *className)
 	return NULL;
 }
 
-// returns qtrue if a weapon is indeed used in multiplayer
-// FIXME: er, we shouldnt really need this, just remove all the weapons we dont actually want :)
-qboolean BG_WeaponInWolfMP(int weapon)
-{
-	switch (weapon)
-	{
-	case WP_KNIFE:
-	case WP_LUGER:
-	case WP_COLT:
-	case WP_MP40:
-	case WP_THOMPSON:
-	case WP_STEN:
-	case WP_GRENADE_LAUNCHER:
-	case WP_GRENADE_PINEAPPLE:
-	case WP_PANZERFAUST:
-	case WP_FLAMETHROWER:
-	case WP_AMMO:
-	case WP_ARTY:
-	case WP_SMOKETRAIL:
-	case WP_MEDKIT:
-	case WP_PLIERS:
-	case WP_SMOKE_MARKER:
-	case WP_DYNAMITE:
-	case WP_MEDIC_SYRINGE:
-	case WP_MEDIC_ADRENALINE:
-	case WP_BINOCULARS:
-	case WP_KAR98:
-	case WP_GPG40:
-	case WP_CARBINE:
-	case WP_M7:
-	case WP_GARAND:
-	case WP_GARAND_SCOPE:
-	case WP_FG42:
-	case WP_FG42SCOPE:
-	case WP_LANDMINE:
-	case WP_SATCHEL:
-	case WP_SATCHEL_DET:
-	case WP_SMOKE_BOMB:
-	case WP_MOBILE_MG42:
-	case WP_MOBILE_MG42_SET:
-	case WP_SILENCER:
-	case WP_SILENCED_COLT:
-	case WP_K43:
-	case WP_K43_SCOPE:
-	case WP_MORTAR:
-	case WP_MORTAR_SET:
-	case WP_AKIMBO_LUGER:
-	case WP_AKIMBO_SILENCEDLUGER:
-	case WP_AKIMBO_COLT:
-	case WP_AKIMBO_SILENCEDCOLT:
-		return qtrue;
-	default:
-		return qfalse;
-	}
-}
-
 /*
 ============
 BG_PlayerTouchesItem
@@ -2689,20 +2633,15 @@ weapon_t BG_GrenadeTypeForTeam(team_t team)
 // setting numOfClips = 0 allows you to check if the client needs ammo, but doesnt give any
 qboolean BG_AddMagicAmmo(playerState_t *ps, int *skill, int teamNum, int numOfClips)
 {
-	int i, weapon;
 	int ammoAdded = qfalse;
 	int maxammo;
-	int clip;
 	int weapNumOfClips;
+	int i      = BG_GrenadesForClass(ps->stats[STAT_PLAYER_CLASS], skill); // handle grenades first
+	int weapon = BG_GrenadeTypeForTeam(teamNum);
+	int clip   = BG_FindClipForWeapon(weapon);
 
-	// handle grenades first
-	i      = BG_GrenadesForClass(ps->stats[STAT_PLAYER_CLASS], skill);
-	weapon = BG_GrenadeTypeForTeam(teamNum);
-
-	clip = BG_FindClipForWeapon(weapon);
 	if (ps->ammoclip[clip] < i)
 	{
-
 		// early out
 		if (!numOfClips)
 		{
@@ -3055,7 +2994,7 @@ void BG_CalculateSpline_r(splinePath_t *spline, vec3_t out1, vec3_t out2, float 
 	if (!spline->next)
 	{
 		return;
-		//      Com_Error( ERR_DROP, "Spline (%s) with no target referenced\n", spline->point.name );
+		//Com_Error( ERR_DROP, "Spline (%s) with no target referenced\n", spline->point.name );
 	}
 	VectorCopy(spline->next->point.origin, points[i + 1]);
 
@@ -3086,7 +3025,7 @@ qboolean BG_TraverseSpline(float *deltaTime, splinePath_t **pSpline)
 		if (!(*pSpline)->next || !(*pSpline)->next->length)
 		{
 			return qfalse;
-			//          Com_Error( ERR_DROP, "Spline path end passed (%s)\n", (*pSpline)->point.name );
+			//Com_Error( ERR_DROP, "Spline path end passed (%s)\n", (*pSpline)->point.name );
 		}
 
 		(*pSpline) = (*pSpline)->next;
@@ -3100,7 +3039,7 @@ qboolean BG_TraverseSpline(float *deltaTime, splinePath_t **pSpline)
 		if (!(*pSpline)->prev || !(*pSpline)->prev->length)
 		{
 			return qfalse;
-			//          Com_Error( ERR_DROP, "Spline path end passed (%s)\n", (*pSpline)->point.name );
+			//Com_Error( ERR_DROP, "Spline path end passed (%s)\n", (*pSpline)->point.name );
 		}
 
 		(*pSpline)   = (*pSpline)->prev;
@@ -3146,8 +3085,6 @@ void BG_LinearPathOrigin2(float radius, splinePath_t **pSpline, float *deltaTime
 	float    t     = 0.f;
 	int      i     = floor((*deltaTime) * (MAX_SPLINE_SEGMENTS));
 	float    frac;
-//  int x = 0;
-//  splinePath_t* start = *pSpline;
 
 	if (i >= MAX_SPLINE_SEGMENTS)
 	{
@@ -3269,7 +3206,7 @@ void BG_LinearPathOrigin2(float radius, splinePath_t **pSpline, float *deltaTime
 			if (!(*pSpline)->prev)
 			{
 				return;
-//              Com_Error( ERR_DROP, "End of spline reached (%s)\n", start->point.name );
+				//Com_Error( ERR_DROP, "End of spline reached (%s)\n", start->point.name );
 			}
 			*pSpline = (*pSpline)->prev;
 		}
@@ -3278,7 +3215,7 @@ void BG_LinearPathOrigin2(float radius, splinePath_t **pSpline, float *deltaTime
 			if (!(*pSpline)->next)
 			{
 				return;
-//              Com_Error( ERR_DROP, "End of spline reached (%s)\n", start->point.name );
+				//Com_Error( ERR_DROP, "End of spline reached (%s)\n", start->point.name );
 			}
 			*pSpline = (*pSpline)->next;
 		}
@@ -3314,10 +3251,9 @@ BG_EvaluateTrajectory
 */
 void BG_EvaluateTrajectory(const trajectory_t *tr, int atTime, vec3_t result, qboolean isAngle, int splinePath)
 {
-	float  deltaTime;
-	float  phase;
-	vec3_t v;
-
+	float        deltaTime;
+	float        phase;
+	vec3_t       v;
 	splinePath_t *pSpline;
 	vec3_t       vec[2];
 	qboolean     backwards = qfalse;
@@ -4081,11 +4017,6 @@ gitem_t *BG_ValidStatWeapon(weapon_t weap)
 		break;
 	}
 
-	if (!BG_WeaponInWolfMP(weap))
-	{
-		return NULL;
-	}
-
 	weap2 = BG_DuplicateWeapon(weap);
 	if (weap != weap2)
 	{
@@ -4329,7 +4260,7 @@ float BG_SplineLength(splinePath_t *pSpline)
 	return dist;
 }
 
-void BG_BuildSplinePaths()
+void BG_BuildSplinePaths(void)
 {
 	int          i, j;
 	pathCorner_t *pnt;
@@ -5206,12 +5137,10 @@ void BG_InitLocations(vec2_t world_mins, vec2_t world_maxs)
 char *BG_GetLocationString(vec_t *pos)
 {
 	static char coord[6];
-	int         x, y;
+	int         x = (pos[0] - locInfo.gridStartCoord[0]) / locInfo.gridStep[0];
+	int         y = (locInfo.gridStartCoord[1] - pos[1]) / locInfo.gridStep[1];
 
 	coord[0] = '\0';
-
-	x = (pos[0] - locInfo.gridStartCoord[0]) / locInfo.gridStep[0];
-	y = (locInfo.gridStartCoord[1] - pos[1]) / locInfo.gridStep[1];
 
 	if (x < 0)
 	{

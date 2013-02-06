@@ -67,7 +67,7 @@
 #pragma warning(disable : 4115)
 #pragma warning(disable : 4125) // decimal digit terminates octal escape sequence
 #pragma warning(disable : 4127) // conditional expression is constant
-#pragma warning(disable : 4136)
+//#pragma warning(disable : 4136) // there is no warning number '4136'
 #pragma warning(disable : 4152) // nonstandard extension, function/data pointer conversion in expression
 #pragma warning(disable : 4201)
 #pragma warning(disable : 4214)
@@ -707,7 +707,7 @@ extern void (QDECL *Q_SnapVector)(vec3_t vec);
 
 #if idppc
 
-static ID_INLINE float Q_rsqrt(float number)
+static inline float Q_rsqrt(float number)
 {
 	float x = 0.5f * number;
 	float y;
@@ -720,7 +720,7 @@ static ID_INLINE float Q_rsqrt(float number)
 }
 
 #ifdef __GNUC__
-static ID_INLINE float Q_fabs(float x)
+static inline float Q_fabs(float x)
 {
 	float abs_x;
 
@@ -1039,18 +1039,6 @@ qboolean Info_NextPair(const char **s, char *key, char *value);
 // this is only here so the functions in q_shared.c and bg_*.c can link
 void QDECL Com_Error(int level, const char *error, ...) __attribute__ ((noreturn, format(printf, 2, 3)));
 void QDECL Com_Printf(const char *msg, ...) __attribute__ ((format(printf, 1, 2)));
-
-/*
-==========================================================
-  RELOAD STATES
-==========================================================
-*/
-
-#define RELOAD_SAVEGAME         0x01
-#define RELOAD_NEXTMAP          0x02
-#define RELOAD_NEXTMAP_WAITING  0x04
-#define RELOAD_FAILED           0x08
-#define RELOAD_ENDGAME          0x10
 
 /*
 ==========================================================
@@ -1701,9 +1689,9 @@ typedef struct entityState_s
 
 typedef enum
 {
-	CA_UNINITIALIZED,
+	CA_UNINITIALIZED,   // obsolete; not used anymore
 	CA_DISCONNECTED,    // not talking to a server
-	CA_AUTHORIZING,     // not used any more, was checking cd key
+	CA_AUTHORIZING,     // deprecated (cd key check), but ET:L will use it in the future
 	CA_CONNECTING,      // sending request packets to the server
 	CA_CHALLENGING,     // sending challenge packets to the server
 	CA_CONNECTED,       // netchan_t established, getting gamestate

@@ -53,9 +53,9 @@ frame.
 
 static float                    frontlerp, backlerp;
 static float                    torsoFrontlerp, torsoBacklerp;
-static int                      *triangles, *boneRefs, *pIndexes;
-static int                      indexes;
-static int                      baseIndex, baseVertex, oldIndexes;
+static int                      *triangles, *boneRefs;
+static glIndex_t                indexes, *pIndexes;
+static glIndex_t                baseIndex, baseVertex, oldIndexes;
 static int                      numVerts;
 static mdmVertex_t              *v;
 static mdxBoneFrame_t           bones[MDX_MAX_BONES], rawBones[MDX_MAX_BONES], oldBones[MDX_MAX_BONES];
@@ -555,7 +555,7 @@ ID_INLINE void SLerp_Normal(vec3_t from, vec3_t to, float tt, vec3_t out)
 #define SIN_TABLE(i)      tr.sinTable[(i) >> FUNCTABLE_SHIFT];
 #define COS_TABLE(i)      tr.sinTable[(((i) >> FUNCTABLE_SHIFT) + (FUNCTABLE_SIZE / 4)) & FUNCTABLE_MASK];
 
-static ID_INLINE void LocalIngleVector(int ingles[3], vec3_t forward)
+static inline void LocalIngleVector(int ingles[3], vec3_t forward)
 {
 	sy = SIN_TABLE(ingles[YAW] & 65535);
 	cy = COS_TABLE(ingles[YAW] & 65535);
@@ -1604,7 +1604,7 @@ void RB_MDM_SurfaceAnim(mdmSurface_t *surface)
 		memcpy(pIndexes, triangles, sizeof(triangles[0]) * indexes);
 		if (baseVertex)
 		{
-			int *indexesEnd;
+			glIndex_t *indexesEnd;
 
 			for (indexesEnd = pIndexes + indexes ; pIndexes < indexesEnd ; pIndexes++)
 			{

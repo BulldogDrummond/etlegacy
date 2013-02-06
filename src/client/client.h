@@ -195,7 +195,7 @@ typedef struct
 	netadr_t serverAddress;
 	int connectTime;                        // for connection retransmits
 	int connectPacketCount;                 // for display on connection dialog
-	char serverMessage[MAX_STRING_TOKENS];          // for display on connection dialog
+	char serverMessage[MAX_STRING_TOKENS];  // for display on connection dialog
 
 	int challenge;                          // from the server to use for connecting
 	int checksumFeed;                       // from the server for checksum calculations
@@ -482,8 +482,8 @@ qboolean CL_GetLimboString(int index, char *buf);
 
 qboolean CL_OpenAVIForWriting(const char *filename);
 void CL_TakeVideoFrame(void);
-void CL_WriteAVIVideoFrame(const byte * imageBuffer, int size);
-void CL_WriteAVIAudioFrame(const byte * pcmBuffer, int size);
+void CL_WriteAVIVideoFrame(const byte *imageBuffer, int size);
+void CL_WriteAVIAudioFrame(const byte *pcmBuffer, int size);
 qboolean CL_CloseAVI(void);
 qboolean CL_VideoRecording(void);
 
@@ -670,7 +670,7 @@ void CL_SetCGameTime(void);
 void CL_FirstSnapshot(void);
 void CL_ShaderStateChanged(void);
 void CL_UpdateLevelHunkUsage(void);
-void CL_CGameBinaryMessageReceived(const char *buf, int buflen, int serverTime);
+void CL_CGameBinaryMessageReceived(const byte *buf, int buflen, int serverTime);
 
 // cl_ui.c
 

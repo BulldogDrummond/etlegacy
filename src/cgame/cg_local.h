@@ -222,8 +222,6 @@ typedef struct
 } cg_mvinfo_t;
 #endif
 
-#define NUM_OVERLAY_FACES 1
-
 //=================================================
 
 // player entities need to track more information
@@ -720,7 +718,6 @@ typedef struct
 #define MAX_SPAWN_VARS          64
 #define MAX_SPAWN_VARS_CHARS    2048
 
-
 #define MAX_SPAWNPOINTS 32
 #define MAX_SPAWNDESC   128
 
@@ -771,9 +768,6 @@ typedef struct
 
 	team_t team;
 } mapEntityData_t;
-
-// the most buddies we can have
-#define MAX_NUM_BUDDY  6 // obsolete
 
 typedef enum
 {
@@ -2099,7 +2093,7 @@ extern vmCvar_t cg_drawReinforcementTime;
 extern vmCvar_t cg_drawWeaponIconFlash;
 extern vmCvar_t cg_noAmmoAutoSwitch;
 extern vmCvar_t cg_printObjectiveInfo;
-#if FEATURE_MULTIVIEW
+#ifdef FEATURE_MULTIVIEW
 extern vmCvar_t cg_specHelp;
 #endif
 extern vmCvar_t cg_uinfo;
@@ -2112,7 +2106,7 @@ extern vmCvar_t demo_avifpsF4;
 extern vmCvar_t demo_avifpsF5;
 extern vmCvar_t demo_drawTimeScale;
 extern vmCvar_t demo_infoWindow;
-#if FEATURE_MULTIVIEW
+#ifdef FEATURE_MULTIVIEW
 extern vmCvar_t mv_sensitivity;
 #endif
 // engine mappings
@@ -2278,7 +2272,6 @@ void CG_ObjectivePrint(const char *str, int charWidth);
 void CG_DrawActive(stereoFrame_t stereoView);
 void CG_CheckForCursorHints(void);
 void CG_DrawTeamBackground(int x, int y, int w, int h, float alpha, int team);
-void CG_OwnerDraw(float x, float y, float w, float h, float text_x, float text_y, int ownerDraw, int ownerDrawFlags, int align, float special, float scale, vec4_t color, qhandle_t shader, int textStyle);
 void CG_Text_Paint_Ext(float x, float y, float scalex, float scaley, vec4_t color, const char *text, float adjust, int limit, int style, fontInfo_t *font);
 void CG_Text_Paint_Centred_Ext(float x, float y, float scalex, float scaley, vec4_t color, const char *text, float adjust, int limit, int style, fontInfo_t *font);
 void CG_Text_Paint(float x, float y, float scale, vec4_t color, const char *text, float adjust, int limit, int style);
@@ -2974,12 +2967,7 @@ typedef struct
 
 extern rankicon_t rankicons[NUM_EXPERIENCE_LEVELS][2];
 
-#define TAB_LEFT_WIDTH 178
-#define TAB_LEFT_EDGE (640 - TAB_LEFT_WIDTH)
-
 fireteamData_t *CG_IsOnSameFireteam(int clientNum, int clientNum2);
-
-#define MAX_SQUAD_SIZE 6
 
 // merged the common UI elements
 #define UI_CAMPAIGN_BRIEFING 0
@@ -2992,11 +2980,6 @@ qboolean CG_UICommonClick(void);
 void CG_DrawUISelectedSoldier(void);
 void CG_UICurrentSquadSetup(void);
 void CG_CampaignBriefingSetup(void);
-
-#define ORDER_ICON_FADE_TIME 3500
-
-int CG_GetFirstSelectedBot(void);
-void CG_AddToJournal(char *text);
 
 // Fireteam stuff
 #define /*fireteamData_t**/ CG_IsOnFireteam(/*int*/ clientNum) /*{ return*/ cgs.clientinfo[clientNum].fireteamData   /*}*/
@@ -3015,9 +2998,9 @@ qboolean CG_FireteamHasClass(int classnum, qboolean selectedonly);
 const char *CG_BuildSelectedFirteamString(void);
 
 #define Pri(x) CG_Printf("[cgnotify]%s", CG_LocalizeServerCommand(x))
-#define CPri(x) CG_CenterPrint(CG_LocalizeServerCommand(x), SCREEN_HEIGHT - (SCREEN_HEIGHT * 0.2), SMALLCHAR_WIDTH);
+#define CPri(x) CG_CenterPrint(CG_LocalizeServerCommand(x), SCREEN_HEIGHT - (SCREEN_HEIGHT * 0.2), SMALLCHAR_WIDTH)
 
-#if FEATURE_MULTIVIEW
+#ifdef FEATURE_MULTIVIEW
 // cg_multiview.c
 void CG_mvDelete_f(void);
 void CG_mvHideView_f(void);
@@ -3046,7 +3029,6 @@ void CG_mvZoomBinoc(float x, float y, float w, float h);
 void CG_mvZoomSniper(float x, float y, float w, float h);
 #endif
 
-
 // cg_window.c
 qboolean CG_addString(cg_window_t *w, char *buf);
 void CG_createStatsWindow(void);
@@ -3054,7 +3036,7 @@ void CG_createTopShotsWindow(void);
 void CG_createWstatsMsgWindow(void);
 void CG_createWtopshotsMsgWindow(void);
 void CG_createMOTDWindow(void);
-#if FEATURE_MULTIVIEW
+#ifdef FEATURE_MULTIVIEW
 void CG_cursorUpdate(void);
 #endif
 void CG_initStrings(void);
@@ -3291,8 +3273,7 @@ void CG_Fireteams_Setup(void);
 void CG_Fireteams_MenuText_Draw(panel_button_t *button);
 void CG_Fireteams_MenuTitleText_Draw(panel_button_t *button);
 
-//
-
+// hitsounds flags
 #define HITSOUNDS_ON                0x01
 #define HITSOUNDS_NOTEAMSHOT        0x02
 #define HITSOUNDS_NOHEADSHOT        0x04
