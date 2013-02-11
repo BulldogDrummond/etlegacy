@@ -45,7 +45,7 @@ key up events are sent even if in console mode
 
 field_t historyEditLines[COMMAND_HISTORY];
 
-int nextHistoryLine;                // the last line in the history buffer, not masked
+int nextHistoryLine;        // the last line in the history buffer, not masked
 int historyLine;            // the line being displayed from history buffer
                             // will be <= nextHistoryLine
 
@@ -325,15 +325,12 @@ x, y, amd width are in pixels
 */
 void Field_VariableSizeDraw(field_t *edit, int x, int y, int width, int size, qboolean showCursor)
 {
-	int  len;
-	int  drawLen;
+	int  len     = strlen(edit->buffer) + 1;
+	int  drawLen = edit->widthInChars;
 	int  prestep;
 	int  cursorChar;
 	char str[MAX_STRING_CHARS];
 	int  i;
-
-	drawLen = edit->widthInChars;
-	len     = strlen(edit->buffer) + 1;
 
 	// guarantee that cursor will be visible
 	if (len <= drawLen)
@@ -352,13 +349,13 @@ void Field_VariableSizeDraw(field_t *edit, int x, int y, int width, int size, qb
 		}
 		prestep = edit->scroll;
 
-/*
-        if ( edit->cursor < len - drawLen ) {
-            prestep = edit->cursor;	// cursor at start
-        } else {
-            prestep = len - drawLen;
-        }
-*/
+		/*
+		if ( edit->cursor < len - drawLen ) {
+		    prestep = edit->cursor;	// cursor at start
+		} else {
+		    prestep = len - drawLen;
+		}
+		*/
 	}
 
 	if (prestep + drawLen > len)
@@ -824,8 +821,6 @@ In game talk message
 */
 void Message_Key(int key)
 {
-	char buffer[MAX_STRING_CHARS];
-
 	if (key == K_ESCAPE)
 	{
 		cls.keyCatchers &= ~KEYCATCH_MESSAGE;
@@ -837,6 +832,8 @@ void Message_Key(int key)
 	{
 		if (chatField.buffer[0] && cls.state == CA_ACTIVE)
 		{
+			char buffer[MAX_STRING_CHARS];
+
 			if (chat_team)
 			{
 				Com_sprintf(buffer, sizeof(buffer), "say_team \"%s\"\n", chatField.buffer);
@@ -994,16 +991,14 @@ char *Key_KeynumToString(int keynum)
 
 static long generateHashValue(const char *fname)
 {
-	int  i;
-	long hash;
+	int  i    = 0;
+	long hash = 0;
 
 	if (!fname)
 	{
 		return 0;
 	}
 
-	hash = 0;
-	i    = 0;
 	while (fname[i] != '\0')
 	{
 		hash += (long)(fname[i]) * (i + 119);
@@ -1146,10 +1141,12 @@ void Key_Unbindall_f(void)
 	int i;
 
 	for (i = 0 ; i < 256 ; i++)
+	{
 		if (keys[i].binding)
 		{
 			Key_SetBinding(i, "");
 		}
+	}
 }
 
 /*
@@ -1330,38 +1327,82 @@ void CL_InitKeyCommands(void)
  */
 qboolean consoleButtonWasPressed = qfalse;
 
+qboolean CL_NumPadEvent(int key)
+{
+#ifdef _WIN32
+	switch (key)
+	{
+	case K_KP_INS:
+		CL_CharEvent(48); return qtrue;
+	case K_KP_END:
+		CL_CharEvent(49); return qtrue;
+	case K_KP_DOWNARROW:
+		CL_CharEvent(50); return qtrue;
+	case K_KP_PGDN:
+		CL_CharEvent(51); return qtrue;
+	case K_KP_LEFTARROW:
+		CL_CharEvent(52); return qtrue;
+	case K_KP_5:
+		CL_CharEvent(53); return qtrue;
+	case K_KP_RIGHTARROW:
+		CL_CharEvent(54); return qtrue;
+	case K_KP_HOME:
+		CL_CharEvent(55); return qtrue;
+	case K_KP_UPARROW:
+		CL_CharEvent(56); return qtrue;
+	case K_KP_PGUP:
+		CL_CharEvent(57); return qtrue;
+	}
+#else
+	switch (key)
+	{
+	case K_KP_INS:        // 0
+	case K_KP_END:        // 1
+	case K_KP_DOWNARROW:  // 2
+	case K_KP_PGDN:       // 3
+	case K_KP_LEFTARROW:  // 4
+	case K_KP_5:          // 5
+	case K_KP_RIGHTARROW: // 6
+	case K_KP_HOME:       // 7
+	case K_KP_UPARROW:    // 8
+	case K_KP_PGUP:       // 9
+		return qtrue;
+	}
+#endif
+	return qfalse;
+}
+
 void CL_KeyEvent(int key, qboolean down, unsigned time)
 {
 	char     *kb;
 	char     cmd[1024];
 	qboolean bypassMenu = qfalse;
 	qboolean onlybinds  = qfalse;
+	qboolean qnumlock   = qfalse;
 
 	if (!key)
 	{
 		return;
 	}
 
-/*
-    switch ( key ) {
-    case K_KP_PGUP:
-    case K_KP_EQUALS:
-    case K_KP_5:
-    case K_KP_LEFTARROW:
-    case K_KP_UPARROW:
-    case K_KP_RIGHTARROW:
-    case K_KP_DOWNARROW:
-    case K_KP_END:
-    case K_KP_PGDN:
-    case K_KP_INS:
-    case K_KP_DEL:
-    case K_KP_HOME:
-        if ( Sys_IsNumLockDown() ) {
-            onlybinds = qtrue;
-        }
-        break;
-    }
-*/
+	// Check if the numlock is set for some reason keys[K_KP_NUMLOCK].down is reversed windows<->unix
+#ifdef _WIN32
+	qnumlock = Sys_IsNumLockDown();
+#else
+	qnumlock = keys[K_KP_NUMLOCK].down;
+#endif // _WIN32
+
+	// special handling for numbers of numeric keypad & NUM pressed
+	if (qnumlock && (cls.keyCatchers & (KEYCATCH_CONSOLE | KEYCATCH_UI)) && down)
+	{
+		onlybinds = CL_NumPadEvent(key);
+		/*
+		if(CL_NumPadEvent(key))
+		{
+		    return;
+		}
+		*/
+	}
 
 	// update auto-repeat status and BUTTON_ANY status
 	keys[key].down = down;
@@ -1654,11 +1695,10 @@ Normal keyboard characters, already shifted / capslocked / etc
 void CL_CharEvent(int key)
 {
 	// the console key should never be used as a char
-	// ydnar: added uk equivalent of shift+`
+	// - added uk equivalent of shift+`
 	// the RIGHT way to do this would be to have certain keys disable the equivalent SE_CHAR event
 
-	// fretn - this should be fixed in Com_EventLoop
-	// but I can't be arsed to leave this as is
+	// this should be fixed in Com_EventLoop but I can't be arsed to leave this as is
 
 	if (key == (unsigned char) '`' || key == (unsigned char) '~' || key == (unsigned char) '\xAC')
 	{

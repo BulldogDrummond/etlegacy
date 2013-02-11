@@ -723,7 +723,6 @@ struct gclient_s
 
 	qboolean noclip;
 
-	int lastCmdTime;                // level.time of last usercmd_t, for EF_CONNECTION
 	// we can't just use pers.lastCommand.time, because
 	// of the g_sycronousclients case
 	int buttons;
@@ -754,7 +753,6 @@ struct gclient_s
 	int respawnTime;                // can respawn when time > this, force after g_forcerespwan
 	int inactivityTime;             // kick players when time > this
 	qboolean inactivityWarning;     // qtrue if the five seoond warning has been given
-	int rewardTime;                 // clear the EF_AWARD_IMPRESSIVE, etc when time > this
 
 	int airOutTime;
 

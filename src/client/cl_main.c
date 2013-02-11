@@ -203,14 +203,10 @@ CLIENT RELIABLE COMMAND COMMUNICATION
 =======================================================================
 */
 
-/*
-======================
-CL_AddReliableCommand
-
-The given command will be transmitted to the server, and is gauranteed to
-not have future usercmd_t executed before it is executed
-======================
-*/
+/**
+ * @brief The given command will be transmitted to the server, and is guaranteed to
+ * not have future usercmd_t executed before it is executed.
+ */
 void CL_AddReliableCommand(const char *cmd)
 {
 	int index;
@@ -473,6 +469,11 @@ void CL_DemoCompleted(void)
 			Com_Printf("%i frames, %3.1f seconds: %3.1f fps\n", clc.timeDemoFrames,
 			           time / 1000.0, clc.timeDemoFrames * 1000.0 / time);
 		}
+	}
+
+	if (CL_VideoRecording())
+	{
+		Cmd_ExecuteString("stopvideo");
 	}
 
 	if (clc.waverecording)
@@ -1533,8 +1534,9 @@ void CL_Vid_Restart_f(void)
 	if (CL_VideoRecording())
 	{
 		//Stop recording and close the avi file before vid_restart
-		Cvar_Set("cl_avidemo", "0");
-		CL_CloseAVI();
+		//Cvar_Set("cl_avidemo", "0");
+		//CL_CloseAVI();
+		Cmd_ExecuteString("stopvideo");
 	}
 
 	/* Do we want to stop the recording of demos on vid_restart?
@@ -2406,13 +2408,11 @@ void CL_ServersResponsePacket(const netadr_t *from, msg_t *msg, qboolean extende
 	Com_Printf("%d servers parsed (total %d)\n", numservers, total);
 }
 
-/*
-=================
-CL_ConnectionlessPacket
-
-Responses to broadcasts, etc
-=================
-*/
+/**
+ * @brief Responses to broadcasts, etc
+ *
+ * Compare first n chars so it doesn’t bail if token is parsed incorrectly.
+ */
 void CL_ConnectionlessPacket(netadr_t from, msg_t *msg)
 {
 	char *s;
@@ -2438,7 +2438,7 @@ void CL_ConnectionlessPacket(netadr_t from, msg_t *msg)
 		}
 		else
 		{
-			// start sending challenge repsonse instead of challenge request packets
+			// start sending challenge response instead of challenge request packets
 			clc.challenge = atoi(Cmd_Argv(1));
 			if (Cmd_Argc() > 2)
 			{
@@ -2558,8 +2558,7 @@ void CL_ConnectionlessPacket(netadr_t from, msg_t *msg)
 		return;
 	}
 
-	// make this compare first n chars so it doesnt bail if token is parsed incorrectly
-	// echo request from server
+	// list of servers sent back by a master server
 	if (!Q_strncmp(c, "getserversResponse", 18))
 	{
 		CL_ServersResponsePacket(&from, msg, qfalse);
@@ -2924,12 +2923,18 @@ CL_StopVideo_f
 */
 void CL_StopVideo_f(void)
 {
-	cl_avidemo->integer = 0;
-	/*
-	*We need to call something like S_Base_StopAllSounds();
-	*here to stop the stuttering. Something it crashes the game.
-	*/
-	CL_CloseAVI();
+	if (CL_VideoRecording())
+	{
+		//cl_avidemo->integer = 0;
+		Cvar_Set("cl_avidemo", "0");
+		/*
+		*We need to call something like S_Base_StopAllSounds();
+		*here to stop the stuttering. Something it crashes the game.
+		*/
+		Cmd_ExecuteString("s_stop");
+		S_StopAllSounds();
+		CL_CloseAVI();
+	}
 }
 
 /*
@@ -2988,7 +2993,7 @@ void CL_Frame(int msec)
 	}
 	else if (cl_avidemo->integer == 0 && CL_VideoRecording())
 	{
-		CL_CloseAVI();
+		CL_StopVideo_f();
 	}
 
 	// save the msec before checking pause
@@ -3346,6 +3351,10 @@ void CL_CheckAutoUpdate(void)
 	info[0] = 0;
 	Info_SetValueForKey(info, "version", ETLEGACY_VERSION_SHORT);
 	Info_SetValueForKey(info, "platform", CPUSTRING);
+	Info_SetValueForKey(info, va("etl_bin_%s.pk3", ETLEGACY_VERSION_SHORT),
+	                    Com_MD5File(va("legacy/etl_bin_%s.pk3", ETLEGACY_VERSION_SHORT), 0, NULL, 0));
+	Info_SetValueForKey(info, va("pak3_%s.pk3", ETLEGACY_VERSION_SHORT),
+	                    Com_MD5File(va("legacy/pak3_%s.pk3", ETLEGACY_VERSION_SHORT), 0, NULL, 0));
 
 	NET_OutOfBandPrint(NS_CLIENT, cls.autoupdateServer, "getUpdateInfo \"%s\"", info);
 
@@ -4510,21 +4519,6 @@ void CL_GetPing(int n, char *buf, int buflen, int *pingtime)
 	CL_SetServerInfoByAddress(cl_pinglist[n].adr, cl_pinglist[n].info, cl_pinglist[n].time);
 
 	*pingtime = time;
-}
-
-/*
-==================
-CL_UpdateServerInfo
-==================
-*/
-void CL_UpdateServerInfo(int n)
-{
-	if (n < 0 || n >= MAX_PINGREQUESTS || !cl_pinglist[n].adr.port)
-	{
-		return;
-	}
-
-	CL_SetServerInfoByAddress(cl_pinglist[n].adr, cl_pinglist[n].info, cl_pinglist[n].time);
 }
 
 /*
